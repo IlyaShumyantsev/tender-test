@@ -39,19 +39,48 @@ else
 fi
 
 # Определяем compose команду
-if command -v docker-compose &> /dev/null; then
+COMPOSE_CMD=""
+USE_PODMAN_RUN=false
+
+# Проверяем все возможные варианты
+if command -v podman-compose &> /dev/null; then
+    COMPOSE_CMD="podman-compose"
+    success "podman-compose найден"
+elif command -v docker-compose &> /dev/null; then
     COMPOSE_CMD="docker-compose"
     success "docker-compose найден"
 elif $CONTAINER_CMD compose version &> /dev/null 2>&1; then
     COMPOSE_CMD="$CONTAINER_CMD compose"
     success "$CONTAINER_CMD compose найден"
-elif command -v podman-compose &> /dev/null; then
-    COMPOSE_CMD="podman-compose"
-    success "podman-compose найден"
 else
-    error "Не найден compose инструмент!"
-    echo "Установите docker-compose или podman-compose"
-    exit 1
+    warning "Compose инструмент не найден"
+    echo ""
+    
+    if [ "$CONTAINER_CMD" = "podman" ]; then
+        info "Переключаемся на прямой запуск через podman (без compose)..."
+        echo ""
+        
+        # Проверяем наличие podman-run.sh
+        if [ -f "./podman-run.sh" ]; then
+            USE_PODMAN_RUN=true
+            success "Используем podman-run.sh"
+        else
+            error "Файл podman-run.sh не найден!"
+            echo ""
+            echo "Установите podman-compose:"
+            echo "  Fedora/RHEL: sudo dnf install podman-compose"
+            echo "  Ubuntu/Debian: pip3 install podman-compose"
+            echo "  Arch: sudo pacman -S podman-compose"
+            exit 1
+        fi
+    else
+        error "Не найден compose инструмент!"
+        echo ""
+        echo "Установите один из вариантов:"
+        echo "  sudo apt install docker-compose-plugin"
+        echo "  или: sudo dnf install docker-compose"
+        exit 1
+    fi
 fi
 
 # ============================================
@@ -89,41 +118,63 @@ EOF
 }
 
 build_images() {
-    info "Сборка образов..."
-    $COMPOSE_CMD build --no-cache
+    if [ "$USE_PODMAN_RUN" = true ]; then
+        info "Сборка образов через podman-run.sh..."
+        chmod +x ./podman-run.sh
+        ./podman-run.sh build
+    else
+        info "Сборка образов..."
+        $COMPOSE_CMD build --no-cache
+    fi
     success "Образы собраны"
 }
 
 start_services() {
-    info "Запуск сервисов..."
-    $COMPOSE_CMD up -d
-    
-    # Ждём пока сервисы станут здоровыми
-    info "Ожидание готовности сервисов..."
-    sleep 5
-    
-    # Проверяем статус
-    if $COMPOSE_CMD ps | grep -q "Up"; then
-        success "Сервисы запущены!"
-        echo ""
-        show_urls
-        show_status
+    if [ "$USE_PODMAN_RUN" = true ]; then
+        info "Запуск через podman-run.sh..."
+        chmod +x ./podman-run.sh
+        ./podman-run.sh up
     else
-        error "Ошибка запуска сервисов"
-        $COMPOSE_CMD logs
-        exit 1
+        info "Запуск сервисов..."
+        $COMPOSE_CMD up -d
+        
+        # Ждём пока сервисы станут здоровыми
+        info "Ожидание готовности сервисов..."
+        sleep 5
+        
+        # Проверяем статус
+        if $COMPOSE_CMD ps | grep -q "Up"; then
+            success "Сервисы запущены!"
+            echo ""
+            show_urls
+            show_status
+        else
+            error "Ошибка запуска сервисов"
+            $COMPOSE_CMD logs
+            exit 1
+        fi
     fi
 }
 
 stop_services() {
-    info "Остановка сервисов..."
-    $COMPOSE_CMD down
+    if [ "$USE_PODMAN_RUN" = true ]; then
+        chmod +x ./podman-run.sh
+        ./podman-run.sh stop
+    else
+        info "Остановка сервисов..."
+        $COMPOSE_CMD down
+    fi
     success "Сервисы остановлены"
 }
 
 restart_services() {
-    info "Перезапуск сервисов..."
-    $COMPOSE_CMD restart
+    if [ "$USE_PODMAN_RUN" = true ]; then
+        chmod +x ./podman-run.sh
+        ./podman-run.sh restart
+    else
+        info "Перезапуск сервисов..."
+        $COMPOSE_CMD restart
+    fi
     success "Сервисы перезапущены"
     show_urls
 }
@@ -131,12 +182,22 @@ restart_services() {
 show_status() {
     echo ""
     info "Статус контейнеров:"
-    $COMPOSE_CMD ps
+    if [ "$USE_PODMAN_RUN" = true ]; then
+        chmod +x ./podman-run.sh
+        ./podman-run.sh status
+    else
+        $COMPOSE_CMD ps
+    fi
     echo ""
 }
 
 show_logs() {
-    $COMPOSE_CMD logs -f
+    if [ "$USE_PODMAN_RUN" = true ]; then
+        chmod +x ./podman-run.sh
+        ./podman-run.sh logs
+    else
+        $COMPOSE_CMD logs -f
+    fi
 }
 
 clean_all() {
@@ -144,8 +205,13 @@ clean_all() {
     read -p "Продолжить? (y/N) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        info "Остановка и удаление контейнеров..."
-        $COMPOSE_CMD down -v --rmi all --remove-orphans
+        if [ "$USE_PODMAN_RUN" = true ]; then
+            chmod +x ./podman-run.sh
+            ./podman-run.sh clean
+        else
+            info "Остановка и удаление контейнеров..."
+            $COMPOSE_CMD down -v --rmi all --remove-orphans
+        fi
         success "Все данные удалены"
     else
         info "Отменено"

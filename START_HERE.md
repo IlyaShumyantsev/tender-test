@@ -12,6 +12,16 @@ chmod +x start.sh
 
 Готово! Откройте http://localhost:8080
 
+### Если нет podman-compose
+
+Скрипт автоматически определит это и переключится на `podman-run.sh` — запуск через обычные podman команды без compose. Ничего дополнительно устанавливать не нужно!
+
+Или запустите напрямую:
+```bash
+chmod +x podman-run.sh
+./podman-run.sh
+```
+
 ---
 
 ## Что делает start.sh
