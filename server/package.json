@@ -1,0 +1,11 @@
+{
+  "name": "tendertrack-server",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "description": "TenderTrack Backend Server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  }
+}
