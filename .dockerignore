@@ -9,7 +9,8 @@ server/node_modules
 # Docker файлы (не нужны внутри контейнера)
 Dockerfile*
 docker-compose.yml
-docker/
+# Папка docker/ нужна для сборки frontend (nginx.conf)
+# docker/
 
 # Документация
 *.md
