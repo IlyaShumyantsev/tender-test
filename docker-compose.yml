@@ -1,0 +1,141 @@
+# Docker Compose для TenderTrack
+# Совместим с Docker Compose и Podman Compose
+#
+# Использование:
+#   docker compose up -d        # Запуск в фоне
+#   docker compose down         # Остановка
+#   docker compose logs -f      # Логи
+#   podman-compose up -d        # Для Podman
+#
+# Переменные окружения:
+#   BACKEND_PORT - порт бэкенда (по умолчанию 3001)
+#   FRONTEND_PORT - порт фронтенда (по умолчанию 8080)
+
+# Загрузка переменных из .env файла
+env_file:
+  - .env
+
+services:
+  # ============================================
+  # Backend: Node.js сервер с SQLite
+  # ============================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: tendertrack-backend
+    restart: unless-stopped
+
+    # Переменные окружения
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DB_PATH=/data/tendertrack.db
+      # API ключи для источников (опционально)
+      # - ZAKUPKI_API_KEY=${ZAKUPKI_API_KEY:-}
+      # - ROSELTORG_TOKEN=${ROSELTORG_TOKEN:-}
+      # - SBERBANK_AST_CERT=${SBERBANK_AST_CERT:-}
+      # Интервалы синхронизации
+      - SYNC_INTERVAL_EIS=1800
+      - SYNC_INTERVAL_OTHER=3600
+
+    # Volume для базы данных (сохранение между перезапусками)
+    volumes:
+      - tendertrack-data:/data
+
+    # Сеть
+    networks:
+      - tendertrack-network
+
+    # Публикация порта (опционально, для отладки)
+    ports:
+      - "${BACKEND_PORT:-3001}:3001"
+
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    # Ресурсы
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    # Логи
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # Frontend: Nginx + React SPA
+  # ============================================
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: tendertrack-frontend
+    restart: unless-stopped
+
+    # Зависимость от backend
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    # Сеть
+    networks:
+      - tendertrack-network
+
+    # Публикация порта
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    # Ресурсы
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
+
+    # Логи
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ============================================
+# Сети
+# ============================================
+networks:
+  tendertrack-network:
+    driver: bridge
+    name: tendertrack-network
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  tendertrack-data:
+    name: tendertrack-data
+    driver: local

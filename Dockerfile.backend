@@ -1,0 +1,52 @@
+# ============================================
+# Бэкенд TenderTrack (Node.js + SQLite)
+# ============================================
+FROM node:20-alpine
+
+# Установка зависимостей для сборки нативных модулей (better-sqlite3)
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    gcc \
+    libc-dev \
+    curl
+
+# Создаём пользователя для безопасности
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -S appuser -u 1001 -G appgroup
+
+WORKDIR /app
+
+# Копируем package.json сервера
+COPY server/package.json ./
+
+# Установка зависимостей сервера
+RUN npm install --production
+
+# Копируем исходный код сервера
+COPY server/ ./
+
+# Создаём директорию для БД и даём права пользователю
+RUN mkdir -p /data && chown -R appuser:appgroup /data /app
+
+# Переключаемся на непривилегированного пользователя
+USER appuser
+
+# Volume для базы данных
+VOLUME ["/data"]
+
+# Порт сервера
+EXPOSE 3001
+
+# Переменные окружения по умолчанию
+ENV NODE_ENV=production \
+    PORT=3001 \
+    DB_PATH=/data/tendertrack.db
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3001/api/health || exit 1
+
+# Запуск сервера
+CMD ["node", "index.js"]
