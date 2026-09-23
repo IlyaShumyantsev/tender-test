@@ -1,12 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Tender, FilterState, ViewMode } from './types';
 import { mockTenders } from './data';
+import { checkBackend, isBackendAvailable, connectWebSocket, disconnectWebSocket, syncSources } from './api';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import TenderCard from './components/TenderCard';
 import TenderDetail from './components/TenderDetail';
 import Filters from './components/Filters';
 import ExportModal from './components/ExportModal';
+import BackendStatus from './components/BackendStatus';
 
 function App() {
   const [tenders, setTenders] = useState<Tender[]>(mockTenders);
@@ -120,8 +122,9 @@ function App() {
 
       {/* Main Content */}
       <main className="flex-1 p-6 overflow-auto">
-        {/* Top bar with export button */}
-        <div className="flex justify-end mb-4">
+        {/* Top bar with status and export */}
+        <div className="flex items-center justify-between mb-4">
+          <BackendStatus />
           <button
             onClick={() => setShowExport(true)}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
