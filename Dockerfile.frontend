@@ -1,7 +1,7 @@
 # ============================================
 # Этап 1: Сборка фронтенда
 # ============================================
-FROM node:20-alpine AS builder
+FROM docker.io/library/node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN npm run build
 # ============================================
 # Этап 2: Production образ с nginx
 # ============================================
-FROM nginx:1.25-alpine
+FROM docker.io/library/nginx:1.25-alpine
 
 # Удаляем стандартную конфигурацию nginx
 RUN rm -rf /etc/nginx/conf.d/* /usr/share/nginx/html/*

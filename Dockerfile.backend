@@ -1,7 +1,7 @@
 # ============================================
 # Бэкенд TenderTrack (Node.js + SQLite)
 # ============================================
-FROM node:20-alpine
+FROM docker.io/library/node:20-alpine
 
 # Установка зависимостей для сборки нативных модулей (better-sqlite3)
 RUN apk add --no-cache \

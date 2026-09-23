@@ -22,6 +22,32 @@ chmod +x podman-run.sh
 ./podman-run.sh
 ```
 
+### Ошибка "short-name did not resolve"
+
+Если видите ошибку:
+```
+Error: short-name "nginx:1.25-alpine" did not resolve to an alias
+```
+
+**Решение уже применено** — Dockerfile использует полные имена образов (`docker.io/library/...`).
+
+Если проблема осталась, настройте реестры:
+```bash
+mkdir -p ~/.config/containers
+cp containers-registries.conf ~/.config/containers/registries.conf
+```
+
+Или установите пакет:
+```bash
+# Fedora/RHEL
+sudo dnf install container-common
+
+# Ubuntu/Debian
+sudo apt install containers-common
+```
+
+Подробнее: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
 ---
 
 ## Что делает start.sh
