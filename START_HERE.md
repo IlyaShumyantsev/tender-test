@@ -46,6 +46,25 @@ sudo dnf install container-common
 sudo apt install containers-common
 ```
 
+### Ошибка "host not found in upstream backend"
+
+Если видите ошибку:
+```
+nginx: [emerg] host not found in upstream "backend"
+```
+
+**Решение уже применено** — скрипт автоматически:
+- Получает IP адрес backend контейнера
+- Добавляет его в `/etc/hosts` frontend через `--add-host`
+- Ждёт готовности backend перед запуском frontend
+
+Если проблема осталась:
+```bash
+# Полная очистка и перезапуск
+./podman-run.sh clean
+./start.sh
+```
+
 Подробнее: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ---

@@ -91,6 +91,97 @@ podman build -t myimage -f Dockerfile.frontend --pull-always .
 podman --log-level=debug build -t myimage -f Dockerfile.frontend .
 ```
 
+## Ошибка: "host not found in upstream backend"
+
+### Проблема
+```
+nginx: [emerg] host not found in upstream "backend" in /etc/nginx/conf.d/default.conf:45
+```
+
+### Причина
+Nginx не может разрешить имя хоста "backend" при старте. Это может происходить если:
+- Backend контейнер ещё не получил IP адрес
+- Контейнеры не в одной сети
+- Podman DNS не работает правильно
+
+### Решение (уже применено)
+
+1. **--add-host** — скрипт `podman-run.sh` автоматически получает IP backend и добавляет его в `/etc/hosts` frontend контейнера через `--add-host backend:<IP>`
+
+2. **Ожидание** — скрипт ждёт пока backend получит IP адрес (до 10 секунд)
+
+3. **Упрощённый healthcheck** — nginx проверяет только себя, не backend
+
+### Если проблема осталась
+
+#### Вариант 1: Перезапустить контейнеры
+```bash
+./podman-run.sh clean
+./start.sh
+```
+
+#### Вариант 2: Проверить сеть
+```bash
+# Список сетей
+podman network ls
+
+# Информация о сети
+podman network inspect tendertrack-network
+
+# Оба контейнера должны быть в этой сети
+podman inspect tendertrack-backend | grep -A 5 "Networks"
+podman inspect tendertrack-frontend | grep -A 5 "Networks"
+```
+
+#### Вариант 3: Проверить IP адреса
+```bash
+# IP backend
+podman inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' tendertrack-backend
+
+# Должен показать IP вроде 10.89.0.2
+
+# Проверить /etc/hosts в frontend
+podman exec tendertrack-frontend cat /etc/hosts
+
+# Должна быть строка: <IP> backend
+```
+
+#### Вариант 4: Вручную добавить host
+```bash
+# Остановить frontend
+podman stop tendertrack-frontend
+podman rm tendertrack-frontend
+
+# Получить IP backend
+BACKEND_IP=$(podman inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' tendertrack-backend)
+
+# Запустить frontend с --add-host
+podman run -d \
+  --name tendertrack-frontend \
+  --network tendertrack-network \
+  -p 8080:80 \
+  --add-host backend:$BACKEND_IP \
+  tendertrack-frontend
+```
+
+#### Вариант 5: Использовать IP вместо имени (временное решение)
+
+Отредактируйте `docker/nginx.conf`, замените:
+```nginx
+proxy_pass http://backend:3001;
+```
+
+На:
+```nginx
+proxy_pass http://10.89.0.2:3001;  # Замените на реальный IP backend
+```
+
+Затем пересоберите образ:
+```bash
+podman rmi tendertrack-frontend
+./start.sh
+```
+
 ## Другие частые проблемы
 
 ### Ошибка: "permission denied" при запуске

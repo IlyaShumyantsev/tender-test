@@ -102,12 +102,45 @@ start_backend() {
 
 start_frontend() {
     info "Запуск Frontend контейнера..."
-    $CTX_CMD run -d \
-        --name $FRONTEND_CONTAINER \
-        --network $NETWORK_NAME \
-        -p ${FRONTEND_PORT}:80 \
-        --restart unless-stopped \
-        $FRONTEND_IMAGE
+    
+    # Ждём пока backend получит IP адрес
+    info "Ожидание IP адреса backend..."
+    for i in {1..10}; do
+        BACKEND_IP=$($CTX_CMD inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $BACKEND_CONTAINER 2>/dev/null | tr -d '[:space:]')
+        
+        if [ -n "$BACKEND_IP" ] && [ "$BACKEND_IP" != "" ]; then
+            success "Backend IP: $BACKEND_IP"
+            break
+        fi
+        
+        if [ $i -eq 10 ]; then
+            warning "Не удалось получить IP backend, используем имя хоста"
+            BACKEND_IP=""
+        fi
+        
+        sleep 1
+    done
+    
+    # Запускаем frontend с --add-host если получили IP
+    if [ -n "$BACKEND_IP" ]; then
+        info "Добавляю host mapping: backend -> $BACKEND_IP"
+        $CTX_CMD run -d \
+            --name $FRONTEND_CONTAINER \
+            --network $NETWORK_NAME \
+            -p ${FRONTEND_PORT}:80 \
+            --restart unless-stopped \
+            --add-host backend:$BACKEND_IP \
+            $FRONTEND_IMAGE
+    else
+        # Если IP не получили, пробуем запустить без --add-host
+        warning "IP backend не получен, запускаю без --add-host"
+        $CTX_CMD run -d \
+            --name $FRONTEND_CONTAINER \
+            --network $NETWORK_NAME \
+            -p ${FRONTEND_PORT}:80 \
+            --restart unless-stopped \
+            $FRONTEND_IMAGE
+    fi
     
     success "Frontend запущен на порту $FRONTEND_PORT"
 }
@@ -123,6 +156,19 @@ wait_for_healthy() {
         fi
         if [ $i -eq 30 ]; then
             warning "Backend не ответил за 30 секунд, но продолжаем..."
+        fi
+        sleep 1
+    done
+    
+    # Ждём frontend
+    for i in {1..15}; do
+        if $CTX_CMD exec $FRONTEND_CONTAINER wget --quiet --spider --timeout=3 http://localhost:80/ 2>/dev/null; then
+            success "Frontend готов"
+            break
+        fi
+        if [ $i -eq 15 ]; then
+            warning "Frontend не ответил за 15 секунд"
+            info "Проверьте логи: $CTX_CMD logs $FRONTEND_CONTAINER"
         fi
         sleep 1
     done
